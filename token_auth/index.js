@@ -3,10 +3,12 @@ const express = require('express');
 const onFinished = require('on-finished');
 const bodyParser = require('body-parser');
 const path = require('path');
-const port = 3000;
 const fs = require('fs');
+require('dotenv').config();
 
+const port = process.env.PORT || 3000;
 const app = express();
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
@@ -19,7 +21,6 @@ class Session {
     try {
       this.#sessions = fs.readFileSync('./sessions.json', 'utf8');
       this.#sessions = JSON.parse(this.#sessions.trim());
-
       console.log(this.#sessions);
     } catch (e) {
       this.#sessions = {};
@@ -31,9 +32,7 @@ class Session {
   }
 
   set(key, value) {
-    if (!value) {
-      value = {};
-    }
+    if (!value) value = {};
     this.#sessions[key] = value;
     this.#storeSessions();
   }
@@ -45,7 +44,6 @@ class Session {
   init(res) {
     const sessionId = uuid.v4();
     this.set(sessionId);
-
     return sessionId;
   }
 
@@ -99,36 +97,48 @@ app.get('/logout', (req, res) => {
   res.redirect('/');
 });
 
-const users = [
-  {
-    login: 'Login',
-    password: 'Password',
-    username: 'Username',
-  },
-  {
-    login: 'Login1',
-    password: 'Password1',
-    username: 'Username1',
-  }
-]
-
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const {login, password} = req.body;
 
-  const user = users.find((user) => {
-    return user.login === login && user.password === password;
-  });
+  try {
+    const response = await fetch(`https://${process.env.AUTH0_DOMAIN}/oauth/token`, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({
+        grant_type: 'http://auth0.com/oauth/grant-type/password-realm',
+        username: login,
+        password: password,
+        client_id: process.env.AUTH0_CLIENT_ID,
+        client_secret: process.env.AUTH0_CLIENT_SECRET,
+        realm: process.env.AUTH0_REALM,
+        scope: 'openid profile email offline_access',
+        audience: process.env.AUTH0_AUDIENCE
+      })
+    });
 
-  if (user) {
-    req.session.username = user.username;
-    req.session.login = user.login;
+    if (!response.ok) return res.status(401).json({error: 'Invalid credentials'});
 
-    res.json({token: req.sessionId});
+    const data = await response.json();
+    const {access_token, id_token, refresh_token} = data;
+
+    req.session.username = login;
+    req.session.access_token = access_token;
+
+    res.json({
+      message: 'Login successful',
+      sessionId: req.sessionId,
+      username: login,
+      token: access_token,
+      refresh_token,
+      id_token
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({error: 'Internal server error'});
   }
-
-  res.status(401).send();
 });
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`)
-})
+});

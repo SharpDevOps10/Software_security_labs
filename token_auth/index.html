@@ -119,17 +119,15 @@
     <script>
         const session = sessionStorage.getItem('session');
 
-        let token;
+        let sessionId;
 
         try {
-            token = JSON.parse(session).token;
+          sessionId = JSON.parse(session).sessionId;
         } catch(e) {}
 
-        if (token) {
+        if (sessionId) {
             axios.get('/', {
-                headers: {
-                    Authorization: token
-                }
+              headers: { Authorization: sessionId }
             }).then((response) => {
                 const { username } = response.data;
 
