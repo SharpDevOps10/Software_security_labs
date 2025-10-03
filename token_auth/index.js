@@ -198,7 +198,7 @@ app.get('/api/check-token', async (req, res) => {
   const expiresIn = session.expires_at - Date.now();
 
   //if (age > 10 * 1000)
-  if (age > 10 * 1000) {
+  if (expiresIn < 60 * 1000) {
     try {
       const refreshResp = await fetch(`https://${process.env.AUTH0_DOMAIN}/oauth/token`, {
         method: 'POST',
