@@ -1,182 +1,209 @@
 <!DOCTYPE html>
 <html lang="en">
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Login</title>
-        <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    </head>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Demo</title>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
 
-    <body>
-        <main id="main-holder">
-            <a href="/logout" id="logout">Logout</a>
+<body>
+<main id="main-holder">
+    <a href="/logout" id="logout">Logout</a>
 
-            <h1 id="login-header">Login</h1>
+    <h1 id="login-header">Login</h1>
 
-            <div id="login-error-msg-holder">
-                <p id="login-error-msg">Invalid username <span id="error-msg-second-line">and/or password</span></p>
-            </div>
+    <div id="login-error-msg-holder">
+        <p id="login-error-msg">Invalid username <span id="error-msg-second-line">and/or password</span></p>
+    </div>
 
-            <form id="login-form" action="/api/login" method="post">
-                <input type="text" name="login" id="username-field" class="login-form-field" placeholder="Username">
-                <input type="password" name="password" id="password-field" class="login-form-field" placeholder="Password">
-                <input type="submit" value="Login" id="login-form-submit">
-            </form>
+    <form id="login-form" action="/api/login" method="post">
+        <input type="text" name="login" id="username-field" class="login-form-field" placeholder="Username">
+        <input type="password" name="password" id="password-field" class="login-form-field" placeholder="Password">
+        <input type="submit" value="Login" id="login-form-submit">
+    </form>
 
-        </main>
-    </body>
+    <h2>Register</h2>
+    <form id="register-form" action="/api/register" method="post">
+        <input type="text" name="email" id="register-email" class="login-form-field" placeholder="Email">
+        <input type="password" name="password" id="register-password" class="login-form-field" placeholder="Password">
+        <input type="submit" value="Register" id="register-form-submit">
+    </form>
+
+    <button id="check-token">Check Token</button>
 
 
-    <style>
-        html {
-            height: 100%;
+    <div id="check-result" style="margin-top: 10px; padding: 10px; border: 1px solid #ccc; width: 80%; white-space: pre-wrap;"></div>
+</main>
+</body>
+
+<style>
+    html {
+        height: 100%;
+    }
+
+    body {
+        height: 100%;
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        display: grid;
+        justify-items: center;
+        align-items: center;
+        background-color: #3a3a3a;
+    }
+
+    #logout {
+        opacity: 0;
+    }
+
+    #main-holder {
+        width: 50%;
+        height: auto;
+        padding: 20px;
+        display: grid;
+        justify-items: center;
+        align-items: center;
+        background-color: white;
+        border-radius: 7px;
+        box-shadow: 0px 0px 5px 2px black;
+    }
+
+    #login-error-msg {
+        width: 60%;
+        text-align: center;
+        margin: 0;
+        padding: 5px;
+        font-size: 12px;
+        font-weight: bold;
+        color: #8a0000;
+        border: 1px solid #8a0000;
+        background-color: #e58f8f;
+        opacity: 0;
+    }
+
+    .login-form-field {
+        border: none;
+        border-bottom: 1px solid #3a3a3a;
+        margin-bottom: 10px;
+        border-radius: 3px;
+        outline: none;
+        padding: 5px;
+    }
+
+    #login-form-submit,
+    #register-form-submit,
+    #check-token {
+        width: 100%;
+        padding: 7px;
+        border: none;
+        border-radius: 5px;
+        color: white;
+        font-weight: bold;
+        background-color: #3a3a3a;
+        cursor: pointer;
+        outline: none;
+        margin-top: 5px;
+    }
+</style>
+
+<script>
+  const session = sessionStorage.getItem('session');
+  let sessionId;
+
+  try {
+    sessionId = JSON.parse(session).sessionId;
+  } catch (e) {
+  }
+
+  const loginForm = document.getElementById('login-form');
+  const loginButton = document.getElementById('login-form-submit');
+  const loginErrorMsg = document.getElementById('login-error-msg');
+  const logoutLink = document.getElementById('logout');
+  const registerForm = document.getElementById('register-form');
+  const registerButton = document.getElementById('register-form-submit');
+  const checkButton = document.getElementById('check-token');
+  const checkResult = document.getElementById('check-result');
+
+  if (sessionId) {
+    axios.get('/', {
+      headers: {Authorization: sessionId}
+    }).then((response) => {
+      const {username} = response.data;
+      if (username) {
+        const mainHolder = document.getElementById('main-holder');
+        const loginHeader = document.getElementById('login-header');
+        loginForm.remove();
+        loginErrorMsg.remove();
+        loginHeader.remove();
+        registerForm.remove();
+        checkButton.style.display = 'block';
+        mainHolder.append(`Hello ${username}`);
+        logoutLink.style.opacity = 1;
+      }
+    });
+  }
+
+  logoutLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    sessionStorage.removeItem('session');
+    location.reload();
+  });
+
+  loginButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    const login = loginForm.login.value;
+    const password = loginForm.password.value;
+
+    axios.post('/api/login', {login, password})
+      .then((response) => {
+        sessionStorage.setItem('session', JSON.stringify(response.data));
+        location.reload();
+      })
+      .catch(() => {
+        loginErrorMsg.style.opacity = 1;
+      });
+  });
+
+  registerButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    const email = registerForm.email.value;
+    const password = registerForm.password.value;
+
+    axios.post('/api/register', {email, password})
+      .then((response) => {
+        alert('User registered successfully!');
+      })
+      .catch((err) => {
+        alert('Registration failed: ' + err.response.data.error);
+      });
+  });
+
+  checkButton.addEventListener("click", () => {
+    if (!sessionId) return alert("Not logged in");
+
+    axios.get('/api/check-token', { headers: { Authorization: sessionId } })
+      .then(res => {
+        const data = res.data;
+
+        if (data.expires_in) {
+          checkResult.innerHTML = `
+            <b>Status:</b> ${data.message} <br>
+            <b>Token:</b> ${data.token.substring(0, 20)}... <br>
+            <b>Expires in:</b> ${data.expires_in} sec (~${Math.round(data.expires_in / 60)} min)
+          `;
+        } else {
+          checkResult.innerHTML = `
+            <b>Status:</b> ${data.message} <br>
+            <b>New Token:</b> ${data.token.substring(0, 20)}... <br>
+          `;
         }
-
-        body {
-            height: 100%;
-            margin: 0;
-            font-family: Arial, Helvetica, sans-serif;
-            display: grid;
-            justify-items: center;
-            align-items: center;
-            background-color: #3a3a3a;
-        }
-
-        #logout {
-            opacity: 0;
-        }
-
-        #main-holder {
-            width: 50%;
-            height: 70%;
-            display: grid;
-            justify-items: center;
-            align-items: center;
-            background-color: white;
-            border-radius: 7px;
-            box-shadow: 0px 0px 5px 2px black;
-        }
-
-        #login-error-msg-holder {
-            width: 100%;
-            height: 100%;
-            display: grid;
-            justify-items: center;
-            align-items: center;
-        }
-
-        #login-error-msg {
-            width: 23%;
-            text-align: center;
-            margin: 0;
-            padding: 5px;
-            font-size: 12px;
-            font-weight: bold;
-            color: #8a0000;
-            border: 1px solid #8a0000;
-            background-color: #e58f8f;
-            opacity: 0;
-        }
-
-        #error-msg-second-line {
-            display: block;
-        }
-
-        #login-form {
-            align-self: flex-start;
-            display: grid;
-            justify-items: center;
-            align-items: center;
-        }
-
-        .login-form-field::placeholder {
-            color: #3a3a3a;
-        }
-
-        .login-form-field {
-            border: none;
-            border-bottom: 1px solid #3a3a3a;
-            margin-bottom: 10px;
-            border-radius: 3px;
-            outline: none;
-            padding: 0px 0px 5px 5px;
-        }
-
-        #login-form-submit {
-            width: 100%;
-            padding: 7px;
-            border: none;
-            border-radius: 5px;
-            color: white;
-            font-weight: bold;
-            background-color: #3a3a3a;
-            cursor: pointer;
-            outline: none;
-        }
-    </style>
-
-    <script>
-        const session = sessionStorage.getItem('session');
-
-        let sessionId;
-
-        try {
-          sessionId = JSON.parse(session).sessionId;
-        } catch(e) {}
-
-        if (sessionId) {
-            axios.get('/', {
-              headers: { Authorization: sessionId }
-            }).then((response) => {
-                const { username } = response.data;
-
-                if (username) {
-                    const mainHolder = document.getElementById("main-holder");
-                    const loginHeader = document.getElementById("login-header");
-
-                    loginForm.remove();
-                    loginErrorMsg.remove();
-                    loginHeader.remove();
-
-                    mainHolder.append(`Hello ${username}`);
-                    logoutLink.style.opacity = 1;
-                }
-            });
-        }
-
-
-        const loginForm = document.getElementById("login-form");
-        const loginButton = document.getElementById("login-form-submit");
-        const loginErrorMsg = document.getElementById("login-error-msg");
-        const logoutLink =  document.getElementById("logout");
-
-        logoutLink.addEventListener("click", (e) => {
-            e.preventDefault();
-            sessionStorage.removeItem('session');
-            location.reload();
-        });
-
-        loginButton.addEventListener("click", (e) => {
-            e.preventDefault();
-            const login = loginForm.login.value;
-            const password = loginForm.password.value;
-
-
-            axios({
-                method: 'post',
-                url: '/api/login',
-                data: {
-                    login,
-                    password
-                }
-            }).then((response) => {
-                const { username } =  response.data;
-                sessionStorage.setItem('session', JSON.stringify(response.data));
-                location.reload();
-            }).catch((response) => {
-                loginErrorMsg.style.opacity = 1;
-            });
-        })
-    </script>
+      })
+      .catch(err => {
+        checkResult.innerHTML = `
+          <b>Error:</b> ${err.response?.data?.error || "Unknown"}
+        `;
+      });
+  });
+</script>
 </html>

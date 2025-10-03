@@ -90,7 +90,7 @@ app.get('/', (req, res) => {
     })
   }
   res.sendFile(path.join(__dirname + '/index.html'));
-})
+});
 
 app.get('/logout', (req, res) => {
   sessions.destroy(req, res);
@@ -119,10 +119,13 @@ app.post('/api/login', async (req, res) => {
     if (!response.ok) return res.status(401).json({error: 'Invalid credentials'});
 
     const data = await response.json();
-    const {access_token, id_token, refresh_token} = data;
+    const {access_token, id_token, refresh_token, expires_in} = data;
 
     req.session.username = login;
     req.session.access_token = access_token;
+    req.session.refresh_token = refresh_token;
+    req.session.expires_at = Date.now() + expires_in * 1000;
+    req.session.issued_at = Date.now();
 
     res.json({
       message: 'Login successful',
@@ -137,6 +140,96 @@ app.post('/api/login', async (req, res) => {
     console.error('Login error:', error);
     res.status(500).json({error: 'Internal server error'});
   }
+});
+
+app.post('/api/register', async (req, res) => {
+  const {email, password} = req.body;
+
+  try {
+    const mgmtTokenResp = await fetch(`https://${process.env.AUTH0_DOMAIN}/oauth/token`, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({
+        client_id: process.env.AUTH0_CLIENT_ID,
+        client_secret: process.env.AUTH0_CLIENT_SECRET,
+        audience: `https://${process.env.AUTH0_DOMAIN}/api/v2/`,
+        grant_type: 'client_credentials'
+      })
+    });
+
+    const {access_token: mgmtToken} = await mgmtTokenResp.json();
+
+    const createResp = await fetch(`https://${process.env.AUTH0_DOMAIN}/api/v2/users`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Authorization': `Bearer ${mgmtToken}`
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        connection: process.env.AUTH0_REALM
+      })
+    });
+
+    if (!createResp.ok) {
+      const err = await createResp.text();
+      return res.status(400).send(err);
+    }
+
+    const user = await createResp.json();
+    res.json({message: 'User created', user});
+
+  } catch (e) {
+    console.error('Register error:', e);
+    res.status(500).json({error: 'Internal server error'});
+  }
+});
+
+app.get('/api/check-token', async (req, res) => {
+  const session = req.session;
+
+  if (!session.access_token) {
+    return res.status(401).json({error: 'Not logged in'});
+  }
+
+  const age = Date.now() - (session.issued_at || 0);
+
+  const expiresIn = session.expires_at - Date.now();
+
+  //if (age > 10 * 1000)
+  if (age > 10 * 1000) {
+    try {
+      const refreshResp = await fetch(`https://${process.env.AUTH0_DOMAIN}/oauth/token`, {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({
+          grant_type: 'refresh_token',
+          client_id: process.env.AUTH0_CLIENT_ID,
+          client_secret: process.env.AUTH0_CLIENT_SECRET,
+          refresh_token: session.refresh_token
+        })
+      });
+
+      const data = await refreshResp.json();
+
+      if (data.access_token) {
+        session.access_token = data.access_token;
+        session.expires_at = Date.now() + data.expires_in * 1000;
+        sessions.set(req.sessionId, session);
+
+        return res.json({message: 'Token refreshed', token: session.access_token});
+      } else {
+        return res.status(401).json({error: 'Failed to refresh token'});
+      }
+
+    } catch (e) {
+      console.error('Refresh error:', e);
+      return res.status(500).json({error: 'Internal server error'});
+    }
+  }
+
+  res.json({message: 'Token is still valid', token: session.access_token, expires_in: expiresIn / 1000});
 });
 
 app.listen(port, () => {
