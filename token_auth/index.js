@@ -60,6 +60,40 @@ const checkJwt = (req, res, next) => {
   });
 };
 
+const checkJwe = async (req, res, next) => {
+  const jwe = req.session.access_token;
+  if (!jwe) return res.status(401).json({ error: 'No token found' });
+
+  try {
+    const payload = await decryptToken(jwe);
+
+    const accessToken = payload.access_token;
+    if (!accessToken) {
+      return res.status(401).json({ error: 'No access_token in payload' });
+    }
+
+    jwt.verify(accessToken, getKey, {
+      audience: process.env.AUTH0_AUDIENCE,
+      issuer: `https://${process.env.AUTH0_DOMAIN}/`,
+      algorithms: ['RS256']
+    }, (err, decoded) => {
+      if (err) {
+        console.error('JWT verification error:', err);
+        return res.status(401).json({ error: 'Invalid access_token' });
+      }
+
+      req.user = decoded;
+      req.tokenPayload = payload;
+
+      next();
+    });
+
+  } catch (err) {
+    console.error('JWE decryption error:', err);
+    return res.status(401).json({ error: 'Invalid or expired JWE' });
+  }
+};
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
@@ -244,7 +278,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-app.get('/api/check-token', async (req, res) => {
+app.get('/api/check-token', checkJwt, async (req, res) => {
   const session = req.session;
 
   if (!session.access_token) {
