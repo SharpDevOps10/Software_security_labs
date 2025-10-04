@@ -4,10 +4,47 @@ const onFinished = require('on-finished');
 const bodyParser = require('body-parser');
 const path = require('path');
 const fs = require('fs');
+
+const jwt = require('jsonwebtoken');
+const jwksClient = require('jwks-rsa');
+
 require('dotenv').config();
 
 const port = process.env.PORT || 3000;
 const app = express();
+
+const client = jwksClient({
+  jwksUri: `https://${process.env.AUTH0_DOMAIN}/.well-known/jwks.json`
+});
+
+const getKey = (header, callback) => {
+  client.getSigningKey(header.kid, (err, key) => {
+    if (err) return callback(err);
+
+    const signingKey = key.getPublicKey();
+    callback(null, signingKey);
+  });
+};
+
+const checkJwt = (req, res, next) => {
+  const token = req.session.access_token;
+
+  if (!token) return res.status(401).json({error: 'No token found'});
+
+  jwt.verify(token, getKey, {
+    audience: process.env.AUTH0_AUDIENCE,
+    issuer: `https://${process.env.AUTH0_DOMAIN}/`,
+    algorithms: ['RS256']
+  }, (err, decoded) => {
+    if (err) {
+      console.error('JWT verification error:', err);
+      return res.status(401).json({error: 'Invalid token'});
+    }
+
+    req.user = decoded;
+    next();
+  });
+};
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
@@ -186,7 +223,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-app.get('/api/check-token', async (req, res) => {
+app.get('/api/check-token', checkJwt, async (req, res) => {
   const session = req.session;
 
   if (!session.access_token) {
@@ -218,7 +255,11 @@ app.get('/api/check-token', async (req, res) => {
         session.expires_at = Date.now() + data.expires_in * 1000;
         sessions.set(req.sessionId, session);
 
-        return res.json({message: 'Token refreshed', token: session.access_token});
+        return res.json({
+          message: 'Token refreshed',
+          token: session.access_token,
+          user: req.user,
+        });
       } else {
         return res.status(401).json({error: 'Failed to refresh token'});
       }
@@ -229,8 +270,26 @@ app.get('/api/check-token', async (req, res) => {
     }
   }
 
-  res.json({message: 'Token is still valid', token: session.access_token, expires_in: expiresIn / 1000});
+  res.json({
+    message: 'Token is valid and signature verified',
+    token: session.access_token,
+    expires_in: expiresIn / 1000,
+    user: req.user,
+  });
 });
+
+app.post('/debug/set-token', (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Provide token in body' });
+
+  req.session.access_token = token;
+  req.session.issued_at = Date.now();
+  req.session.expires_at = Date.now() + 60 * 1000;
+
+  sessions.set(req.sessionId, req.session);
+  res.json({ message: 'Token set for testing', sessionId: req.sessionId });
+});
+
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`)
