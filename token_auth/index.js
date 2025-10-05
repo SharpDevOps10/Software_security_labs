@@ -278,7 +278,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-app.get('/api/check-token', checkJwt, async (req, res) => {
+app.get('/api/check-token', checkJwe, async (req, res) => {
   const session = req.session;
 
   if (!session.access_token) {
