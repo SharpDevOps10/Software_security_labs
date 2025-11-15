@@ -1,14 +1,14 @@
 const net = require('node:net');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
-const { symmetricEncrypt, symmetricDecrypt, deriveSessionKey } = require('./crypto-helpers');
+const {symmetricEncrypt, symmetricDecrypt, deriveSessionKey} = require('./crypto-helpers');
 
 const PORT = 8443;
 const HOST = 'localhost';
+const CA_SERVER_PORT = 9000;
+const CA_SERVER_HOST = 'localhost';
 
-const trustedCaCertificatePem = fs.readFileSync('ca.crt', 'utf8');
-const caCert = new crypto.X509Certificate(trustedCaCertificatePem);
-console.log('[Клієнт] Завантажив довірений сертифікат CA.');
+console.log('[Клієнт] Запуск...');
 
 const client = new net.Socket();
 const session = {
@@ -32,22 +32,35 @@ client.connect(PORT, HOST, () => {
   client.once('data', (serverHelloData) => {
     const serverHello = JSON.parse(serverHelloData.toString());
     session.serverRandom = Buffer.from(serverHello.serverRandom, 'base64');
+    const certificateFromMainServer = serverHello.certificatePem;
     console.log('[Клієнт] Отримав ЕТАП 2 (Server Hello + Cert).');
 
-    // ЕТАП 3: Автентифікація (Перевірка сертифіката)
-    console.log('[Клієнт] Починаю ЕТАП 3 (Автентифікація)...');
-    try {
-      const serverCert = new crypto.X509Certificate(serverHello.certificatePem);
+    // ЕТАП 3: Автентифікація (Перевірка сертифіката, звернення до CA-Сервера)
+    console.log('[Клієнт] Починаю ЕТАП 3 (Автентифікація через CA-Сервер)...');
+    const caSocket = new net.Socket();
 
-      if (!serverCert.verify(caCert.publicKey)) {
-        throw new Error('Сертифікат сервера НЕ підписаний довіреним CA!');
+    caSocket.connect(CA_SERVER_PORT, CA_SERVER_HOST, () => {
+      console.log(`[Клієнт -> CA] Підключився до CA-Сервера (порт ${CA_SERVER_PORT}).`);
+      caSocket.write(certificateFromMainServer);
+    });
+
+    caSocket.once('data', (caResponseData) => {
+      const caResponse = caResponseData.toString();
+      console.log(`[Клієнт <- CA] Отримав відповідь від CA: "${caResponse}"`);
+      caSocket.end();
+
+      if (caResponse !== 'VALID') {
+        console.error(`[Клієнт] !!! ПЕРЕВІРКА ПРОВАЛЕНА (ЕТАП 3): CA-Сервер відхилив сертифікат. !!!`);
+        client.destroy();
+        return;
       }
 
-      console.log('[Клієнт] ...Успіх! Сертифікат сервера дійсний');
+      console.log('[Клієнт] ...Успіх! CA-Сервер підтвердив сертифікат.');
 
       // ЕТАП 4: Створення та відправка "Premaster Secret"
       session.premasterSecret = crypto.randomBytes(32);
 
+      const serverCert = new crypto.X509Certificate(certificateFromMainServer);
       const encryptedPremaster = crypto.publicEncrypt(
         serverCert.publicKey,
         session.premasterSecret
@@ -93,15 +106,15 @@ client.connect(PORT, HOST, () => {
           });
 
         } else {
-          console.error('[Клієнт] Помилка: Повідомлення "Server Ready" невірне.');
+          console.error('[Клієнт] Помилка: Повідомлення "Server Ready" не правильне.');
           client.destroy();
         }
       });
-
-    } catch (e) {
-      console.error(`[Клієнт] !!! ПЕРЕВІРКА ПРОВАЛЕНА (ЕТАП 3): ${e.message} !!!`);
+    });
+    caSocket.on('error', (err) => {
+      console.error(`[Клієнт] !!! ПЕРЕВІРКА ПРОВАЛЕНА (ЕТАП 3): Не вдалося підключитися до CA-Сервера: ${err.message} !!!`);
       client.destroy();
-    }
+    });
   });
 });
 
