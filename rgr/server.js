@@ -67,13 +67,28 @@ const server = net.createServer((socket) => {
           // ЕТАП 7: Початок захищеного чату
           console.log('\n*** [Сервер] Рукостискання завершено. Канал безпечний. ***\n');
 
+          let chatBuffer = '';
           socket.on('data', (encryptedChatData) => {
-            const chatMsg = JSON.parse(encryptedChatData.toString());
-            const decrypted = symmetricDecrypt(chatMsg.message, session.sessionKey);
-            console.log(`[Сервер] Отримав повідомлення: "${decrypted}"`);
+            chatBuffer += encryptedChatData.toString();
 
-            const reply = symmetricEncrypt(`Сервер отримав твоє: "${decrypted}"`, session.sessionKey);
-            socket.write(JSON.stringify({type: 'chat', message: reply}));
+            let newlineIndex;
+            while ((newlineIndex = chatBuffer.indexOf('\n')) !== -1) {
+              const jsonString = chatBuffer.substring(0, newlineIndex);
+              chatBuffer = chatBuffer.substring(newlineIndex + 1);
+
+              if (jsonString) {
+                try {
+                  const chatMsg = JSON.parse(jsonString);
+                  const decrypted = symmetricDecrypt(chatMsg.message, session.sessionKey);
+                  console.log(`[Сервер] Отримав повідомлення: "${decrypted}"`);
+
+                  const reply = symmetricEncrypt(`Сервер отримав твоє: "${decrypted}"`, session.sessionKey);
+                  socket.write(JSON.stringify({type: 'chat', message: reply}) + '\n');
+                } catch (e) {
+                  console.error('[Сервер] Помилка парсингу JSON з буфера:', e.message, 'Дані:', jsonString);
+                }
+              }
+            }
           });
 
         } catch (e) {

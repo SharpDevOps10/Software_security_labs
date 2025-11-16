@@ -89,20 +89,38 @@ client.connect(PORT, HOST, () => {
           console.log(`[Клієнт] Отримав ЕТАП 6 (Server Ready): "${decryptedMsg}"`);
 
           const clientReadyMsg = symmetricEncrypt('Client: Finished', session.sessionKey);
-          client.write(JSON.stringify({type: 'ready', message: clientReadyMsg}));
+          client.write(JSON.stringify({ type: 'ready', message: clientReadyMsg }) + '\n');
 
           console.log('\n*** [Клієнт] Рукостискання завершено. Канал безпечний. ***\n');
 
           // ЕТАП 7: Початок захищеного чату
           const chatMessage = symmetricEncrypt('Привіт, Сервер! Як справи?', session.sessionKey);
-          client.write(JSON.stringify({type: 'chat', message: chatMessage}));
+          client.write(JSON.stringify({ type: 'chat', message: chatMessage }) + '\n');
 
+          let chatBuffer = '';
           client.on('data', (encryptedChatData) => {
-            const chatMsg = JSON.parse(encryptedChatData.toString());
-            const decrypted = symmetricDecrypt(chatMsg.message, session.sessionKey);
-            console.log(`[Клієнт] Отримав відповідь: "${decrypted}"`);
+            chatBuffer += encryptedChatData.toString();
 
-            client.end();
+            let newlineIndex;
+
+            while ((newlineIndex = chatBuffer.indexOf('\n')) !== -1) {
+              const jsonString = chatBuffer.substring(0, newlineIndex);
+              chatBuffer = chatBuffer.substring(newlineIndex + 1);
+
+              if (jsonString) {
+                try {
+                  const chatMsg = JSON.parse(jsonString);
+                  const decrypted = symmetricDecrypt(chatMsg.message, session.sessionKey);
+                  console.log(`[Клієнт] Отримав відповідь: "${decrypted}"`);
+
+                  if (decrypted.includes('Привіт, Сервер!')) {
+                    client.end();
+                  }
+                } catch (e) {
+                  console.error('[Клієнт] Помилка парсингу JSON з буфера:', e.message, 'Дані:', jsonString);
+                }
+              }
+            }
           });
 
         } else {
