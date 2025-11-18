@@ -39,7 +39,7 @@ function broadcastMessage(originalMsgObj, excludeSocket = null) {
     seenMessages.add(originalMsgObj.id);
   }
 
-  console.log(`[${MY_NAME}] 📡 Маршрутизація повідомлення ${originalMsgObj.id} до ${activePeers.size} пірів...`);
+  console.log(`[${MY_NAME}] Маршрутизація повідомлення ${originalMsgObj.id} до ${activePeers.size} пірів...`);
 
   for (const [peerSocket, peerData] of activePeers) {
     if (peerSocket === excludeSocket) continue;
@@ -131,7 +131,7 @@ function connectToPeer(host, port) {
           if (decrypted.endsWith(': Finished')) {
             const peerName = decrypted.split(':')[0];
 
-            console.log(`\n✅ [${MY_NAME}] З'єднання встановлено з ${peerName} (Outbound)`);
+            console.log(`\n [${MY_NAME}] З'єднання встановлено з ${peerName} (Outbound)`);
             activePeers.set(client, {key: session.sessionKey, name: peerName});
 
             const myReady = symmetricEncrypt(`${MY_NAME}: Finished`, session.sessionKey);
@@ -145,7 +145,6 @@ function connectToPeer(host, port) {
   });
 }
 
-// --- СПІЛЬНА ЛОГІКА ОБРОБКИ ПОВІДОМЛЕНЬ (Secure Channel) ---
 function setupSecureChannel(socket, key, type) {
   let buffer = '';
   let peerName = 'Unknown Peer';
@@ -182,7 +181,7 @@ function setupSecureChannel(socket, key, type) {
           }
 
           seenMessages.add(broadcastObj.id);
-          console.log(`\n📢 [BROADCAST від ${broadcastObj.origin}]: ${broadcastObj.text}`);
+          console.log(`\n [BROADCAST від ${broadcastObj.origin}]: ${broadcastObj.text}`);
 
           broadcastMessage(broadcastObj, socket);
         }
