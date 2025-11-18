@@ -2,6 +2,7 @@ const net = require('node:net');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { symmetricEncrypt, symmetricDecrypt, deriveSessionKey } = require('./crypto-helpers');
+const {sendFragmented} = require('./send-fragmented');
 
 const PORT = 8443;
 
@@ -83,7 +84,7 @@ const server = net.createServer((socket) => {
                   console.log(`[Сервер] Отримав повідомлення: "${decrypted}"`);
 
                   const reply = symmetricEncrypt(`Сервер отримав твоє: "${decrypted}"`, session.sessionKey);
-                  socket.write(JSON.stringify({type: 'chat', message: reply}) + '\n');
+                  sendFragmented(socket, JSON.stringify({type: 'chat', message: reply}) + '\n', '[Сервер]');
                 } catch (e) {
                   console.error('[Сервер] Помилка парсингу JSON з буфера:', e.message, 'Дані:', jsonString);
                 }

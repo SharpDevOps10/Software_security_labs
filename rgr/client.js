@@ -2,6 +2,7 @@ const net = require('node:net');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const {symmetricEncrypt, symmetricDecrypt, deriveSessionKey} = require('./crypto-helpers');
+const {sendFragmented} = require('./send-fragmented');
 
 const PORT = 8443;
 const HOST = 'localhost';
@@ -89,13 +90,11 @@ client.connect(PORT, HOST, () => {
           console.log(`[Клієнт] Отримав ЕТАП 6 (Server Ready): "${decryptedMsg}"`);
 
           const clientReadyMsg = symmetricEncrypt('Client: Finished', session.sessionKey);
-          client.write(JSON.stringify({ type: 'ready', message: clientReadyMsg }) + '\n');
+          sendFragmented(client, JSON.stringify({ type: 'ready', message: clientReadyMsg }) + '\n', '[Клієнт]');
 
           console.log('\n*** [Клієнт] Рукостискання завершено. Канал безпечний. ***\n');
 
           // ЕТАП 7: Початок захищеного чату
-          const chatMessage = symmetricEncrypt('Привіт, Сервер! Як справи?', session.sessionKey);
-          client.write(JSON.stringify({ type: 'chat', message: chatMessage }) + '\n');
 
           let chatBuffer = '';
           client.on('data', (encryptedChatData) => {
@@ -113,7 +112,12 @@ client.connect(PORT, HOST, () => {
                   const decrypted = symmetricDecrypt(chatMsg.message, session.sessionKey);
                   console.log(`[Клієнт] Отримав відповідь: "${decrypted}"`);
 
-                  if (decrypted.includes('Привіт, Сервер!')) {
+                  if (decrypted.includes('Client: Finished')) {
+                    console.log('[Клієнт] > надсилаю "Привіт, Сервер!"');
+                    const chatMessage = symmetricEncrypt('Привіт, Сервер! Як справи?', session.sessionKey);
+                    sendFragmented(client, JSON.stringify({ type: 'chat', message: chatMessage }) + '\n', '[Клієнт]');
+
+                  } else if (decrypted.includes('Привіт, Сервер!')) {
                     client.end();
                   }
                 } catch (e) {
